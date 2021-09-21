@@ -1,0 +1,936 @@
+---
+title: "msat paper analysis and figures"
+author: "Kate Stankiewicz"
+date: "3/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### load libraries and set wd ###
+
+```{r}
+library(dplyr)
+library(tools)
+library(tidyverse)
+library(reshape)
+library(plotrix)
+library(tidyr)
+library(ggplot2)
+library(cowplot)
+library(adegenet)
+library(poppr)
+library(hierfstat)
+library(ggpattern)
+```
+
+# focused Section #
+## Loop to read in each dataset ##
+
+```{r}
+setwd("~/focused/all_estimate_files")
+
+ldf <- list() 
+listcsv <- dir(pattern = "*.csv") 
+for (k in 1:length(listcsv)){
+ ldf[[k]] <- read.csv(file = listcsv[k], check.names = F, row.names = 1, header = T)
+}
+names(ldf) <- gsub(".csv","",
+                       dir(pattern = "*.csv"),
+                       fixed = TRUE)
+names(ldf) <- gsub("Results_Estimators_","", names(ldf), fixed = TRUE)
+names(ldf) <- gsub("_run","", names(ldf), fixed = TRUE)
+```
+
+## process each dataset ##
+
+```{r}
+# get only the estimators you want
+ldf_est_only <- lapply(ldf, function(x) x <- x[-c(3:15), ])
+
+# create a new column with k values
+ldf_k_vals <- lapply(ldf_est_only, function(x) cbind(x, k_val = colnames(x)[apply(x,1,which.max)]))
+
+#keep only the K values
+ldf_k_vals_only <- lapply(ldf_k_vals, function(x) x[c('k_val')])
+
+#transpose each
+t_ldf_k_vals_only <- lapply(ldf_k_vals_only, function(x) as.data.frame(t(x)))
+
+#convert to one big dataframe
+one_df <- do.call(rbind, t_ldf_k_vals_only)
+
+#make only numeric
+one_df[] <- lapply(one_df, gsub, pattern= "K=", replacement = "")
+one_df_num <- as.data.frame(sapply(one_df, as.numeric))
+rownames(one_df_num) <- rownames(one_df)
+```
+
+## get differences from deltaK and ln Pr(X|K)) ##
+
+```{r}
+#for deltaK
+dk_diff <- one_df_num[,c(1,3:ncol(one_df_num))]
+dk_diff[2:ncol(dk_diff)] <- dk_diff[2:ncol(dk_diff)]-dk_diff[,1]
+dk_diff <- dk_diff[,2:ncol(dk_diff)]
+
+#for ln Pr(X|K))
+lnk_diff <- one_df_num[,2:ncol(one_df_num)]
+lnk_diff[2:ncol(lnk_diff)] <- lnk_diff[2:ncol(lnk_diff)]-lnk_diff[,1]
+lnk_diff <- lnk_diff[,2:ncol(lnk_diff)]
+```
+
+
+## get summary stats for DeltaK ##
+
+```{r}
+#get the means
+means_dk <- as.data.frame(colMeans(dk_diff))
+colnames(means_dk) <- c("mean")
+means_dk$estimator <- rownames(means_dk)
+
+#get the sd
+sd_dk <-sapply(dk_diff, sd)
+sd_dk <- as.data.frame(sd_dk)
+colnames(sd_dk) <- c("sd")
+sd_dk$estimator <- rownames(sd_dk)
+
+#get SEM
+SEM_dk <- sapply(dk_diff, std.error)
+SEM_dk <- as.data.frame(SEM_dk)
+colnames(SEM_dk) <- c("sem")
+SEM_dk$estimator <- rownames(SEM_dk)
+
+#merge
+sum_dk <- merge(means_dk, sd_dk, by.y = "estimator")
+all_sum_dk <- merge(sum_dk, SEM_dk, by.y = "estimator")
+
+#separate estimator from threshold
+all_sum_dk <- all_sum_dk %>% separate(estimator, into = c('estimator', 'threshold'), sep = -3)
+```
+
+## Get summary stats for ln Pr(X|K)) ##
+
+```{r}
+#for LnK
+#get the means
+means_lnk <- as.data.frame(colMeans(lnk_diff))
+colnames(means_lnk) <- c("mean")
+means_lnk$estimator <- rownames(means_lnk)
+
+#get the sd
+sd_lnk <-sapply(lnk_diff, sd)
+sd_lnk <- as.data.frame(sd_lnk)
+colnames(sd_lnk) <- c("sd")
+sd_lnk$estimator <- rownames(sd_lnk)
+
+#get SEM
+SEM_lnk <- sapply(lnk_diff, std.error)
+SEM_lnk <- as.data.frame(SEM_lnk)
+colnames(SEM_lnk) <- c("sem")
+SEM_lnk$estimator <- rownames(SEM_lnk)
+
+#merge
+sum_lnk <- merge(means_lnk, sd_lnk, by.y = "estimator")
+all_sum_lnk <- merge(sum_lnk, SEM_lnk, by.y = "estimator")
+
+#separate estimator from threshold
+all_sum_lnk <- all_sum_lnk %>% separate(estimator, into = c('estimator', 'threshold'), sep = -3)
+```
+
+## calculate proportion agreement ##
+```{r}
+#for deltaK
+dk_num_0 <- as.data.frame(rowSums(dk_diff == 0))
+colnames(dk_num_0) <- c("count")
+dk_num_0$prop_agree <- dk_num_0$count / 16
+
+#for lnK
+lnk_num_0 <- as.data.frame(rowSums(lnk_diff == 0))
+colnames(lnk_num_0) <- c("count")
+lnk_num_0$prop_agree <- lnk_num_0$count / 16
+```
+
+
+## Now create dataframe of sample evenness score with proportion agreement ##
+
+```{r}
+setwd("~/")
+even_propagree <- read.csv(file = "final_prop_even_weighted.csv", header = T)
+
+## remove NAs
+even_propagree <- na.omit(even_propagree)
+
+## get the weights
+w <- even_propagree$n 
+w <- na.omit(w)
+
+# get proportion agreement with ln Pr(X|K))
+even_propagree$prop_agree_lnk <- lnk_num_0$prop_agree
+
+```
+
+
+# broad section #
+## Loop to read in each dataset ##
+
+```{r}
+setwd("~/broad/all_estimate_files") 
+
+ldfn <- list() 
+listcsvn <- dir(pattern = "*.csv") 
+for (k in 1:length(listcsvn)){
+ ldfn[[k]] <- read.csv(file = listcsvn[k], check.names = F, row.names = 1, header = T)
+}
+names(ldfn) <- gsub(".csv","",
+                       dir(pattern = "*.csv"),
+                       fixed = TRUE)
+names(ldfn) <- gsub("Results_Estimators_","", names(ldfn), fixed = TRUE)
+names(ldfn) <- gsub("_run","", names(ldfn), fixed = TRUE)
+```
+
+## process each dataset ##
+
+```{r}
+# get only the estimators you want
+ldfn_est_only <- lapply(ldfn, function(x) x <- x[-c(3:15), ])
+
+# create a new column with k values
+ldfn_k_vals <- lapply(ldfn_est_only, function(x) cbind(x, k_val = colnames(x)[apply(x,1,which.max)]))
+
+#keep only the K values
+ldfn_k_vals_only <- lapply(ldfn_k_vals, function(x) x[c('k_val')])
+
+#transpose each
+t_ldfn_k_vals_only <- lapply(ldfn_k_vals_only, function(x) as.data.frame(t(x)))
+
+#convert to one big dataframe
+one_dfn <- do.call(rbind, t_ldfn_k_vals_only)
+
+#make only numeric
+one_dfn[] <- lapply(one_dfn, gsub, pattern= "K=", replacement = "")
+one_dfn_num <- as.data.frame(sapply(one_dfn, as.numeric))
+rownames(one_dfn_num) <- rownames(one_dfn)
+```
+
+## get differences from deltaK and Lnk ##
+
+```{r}
+#for deltaK
+dk_diffn <- one_dfn_num[,c(1,3:ncol(one_dfn_num))]
+dk_diffn[2:ncol(dk_diffn)] <- dk_diffn[2:ncol(dk_diffn)]-dk_diffn[,1]
+dk_diffn <- dk_diffn[,2:ncol(dk_diffn)]
+
+#for PP
+lnk_diffn <- one_dfn_num[,2:ncol(one_dfn_num)]
+lnk_diffn[2:ncol(lnk_diffn)] <- lnk_diffn[2:ncol(lnk_diffn)]-lnk_diffn[,1]
+lnk_diffn <- lnk_diffn[,2:ncol(lnk_diffn)]
+```
+
+
+## get summary stats for DeltaK ##
+
+```{r}
+#get the means
+means_dkn <- as.data.frame(colMeans(dk_diffn))
+colnames(means_dkn) <- c("mean")
+means_dkn$estimator <- rownames(means_dkn)
+
+#get the sd
+sd_dkn <-sapply(dk_diffn, sd)
+sd_dkn <- as.data.frame(sd_dkn)
+colnames(sd_dkn) <- c("sd")
+sd_dkn$estimator <- rownames(sd_dkn)
+
+#get SEM
+SEM_dkn <- sapply(dk_diffn, std.error)
+SEM_dkn <- as.data.frame(SEM_dkn)
+colnames(SEM_dkn) <- c("sem")
+SEM_dkn$estimator <- rownames(SEM_dkn)
+
+#merge
+sum_dkn <- merge(means_dkn, sd_dkn, by.y = "estimator")
+all_sum_dkn <- merge(sum_dkn, SEM_dkn, by.y = "estimator")
+
+#separate estimator from threshold
+all_sum_dkn <- all_sum_dkn %>% separate(estimator, into = c('estimator', 'threshold'), sep = -3)
+```
+
+## Get summary stats for ln Pr(X|K)) ##
+
+```{r}
+#for LnK
+#get the means
+means_lnkn <- as.data.frame(colMeans(lnk_diffn))
+colnames(means_lnkn) <- c("mean")
+means_lnkn$estimator <- rownames(means_lnkn)
+
+#get the sd
+sd_lnkn <-sapply(lnk_diffn, sd)
+sd_lnkn <- as.data.frame(sd_lnkn)
+colnames(sd_lnkn) <- c("sd")
+sd_lnkn$estimator <- rownames(sd_lnkn)
+
+#get SEM
+SEM_lnkn <- sapply(lnk_diffn, std.error)
+SEM_lnkn <- as.data.frame(SEM_lnkn)
+colnames(SEM_lnkn) <- c("sem")
+SEM_lnkn$estimator <- rownames(SEM_lnkn)
+
+#merge
+sum_lnkn <- merge(means_lnkn, sd_lnkn, by.y = "estimator")
+all_sum_lnkn <- merge(sum_lnkn, SEM_lnkn, by.y = "estimator")
+
+#separate estimator from threshold
+all_sum_lnkn <- all_sum_lnkn %>% separate(estimator, into = c('estimator', 'threshold'), sep = -3)
+```
+
+## calculate proportion agreement ##
+```{r}
+#for deltaK
+dkn_num_0 <- as.data.frame(rowSums(dk_diffn == 0))
+colnames(dkn_num_0) <- c("count")
+dkn_num_0$prop_agree <- dkn_num_0$count / 16
+
+#for ln Pr(X|K))
+lnkn_num_0 <- as.data.frame(rowSums(lnk_diffn == 0))
+colnames(lnkn_num_0) <- c("count")
+lnkn_num_0$prop_agree <- lnkn_num_0$count / 16
+```
+
+## Now calculate sample evenness ##
+
+```{r}
+# read in the files
+setwd("~/broad/pop_files")
+pops <- list() 
+listtxt <- dir(pattern = "*.txt") 
+for (k in 1:length(listcsvn)){
+ pops[[k]] <- read.table(file = listtxt[k], check.names = F, header = F)
+}
+names(pops) <- gsub(".txt","",
+                       dir(pattern = "*.txt"),
+                       fixed = TRUE)
+names(pops) <- sub("\\_.*","", names(pops))
+
+# count how many samples for each location for each dataset
+pops_only <- lapply(pops, function(x) x <- table(x[,2]))
+
+# convert to dataframe
+pops_df <- lapply(pops_only, function (x) x <- as.data.frame(x))
+
+# sum total individuals for each dataset
+sums <- lapply(pops_df, transform, totals = sum(Freq))
+
+# divide each count by total
+per_pop <- lapply(sums, transform, proportion = Freq / totals)
+
+# take the Ln of per pop
+logs_perpop <- lapply(per_pop, transform, logs_pop = log(proportion))
+
+# multiply Ln per pop by per pop
+logs_mult <- lapply(logs_perpop, transform, ShanD = proportion * logs_pop)
+
+# sum Diversity index
+ShanD_tot <- lapply(logs_mult, transform, tot_shanD =-1 * sum(ShanD))
+
+# calculate total # pops
+pop_totals <- lapply(ShanD_tot, function(x) transform(x,num_pops =c(nrow(x))))
+
+# calculate Ln(S)
+ln_s <- lapply(pop_totals, transform, lns =log(num_pops))
+
+# calculate evenness score
+evennessn <- lapply(ln_s, transform, even = tot_shanD / lns )
+```
+
+
+## create a new dataframe of evenness score and proportion agreement ##
+```{r}
+# get the weights
+wn <- unlist(lapply(evennessn,function(x) x[1,3]))
+wn <- as.data.frame(wn)
+wn <- wn[,1]
+
+# get evenness score
+even_score <- unlist(lapply(evennessn,function(x) x[1,10]))
+even_score <- as.data.frame(even_score)
+
+# get proportion agreement with Dk
+even_score$prop_agree_dk <- dkn_num_0$prop_agree
+even_propagreeN <- even_score
+
+# get proportion agreement with ln Pr(X|K))
+even_propagreeN$prop_agree_lnk <- lnkn_num_0$prop_agree
+```
+
+# Finalize Figures: combine plots from focused and broad #
+
+## Figure 1: histogram
+
+```{r}
+#for deltaK focused
+h_dkc <-ggplot(dk_num_0, aes(x=prop_agree)) + 
+  geom_histogram(binwidth = 0.2,color="black", fill="grey")+theme_bw()+xlab("Proportion Agreement")
+
+#for LnK focused
+h_lnkc <-ggplot(lnk_num_0, aes(x=prop_agree)) + 
+  geom_histogram(binwidth = 0.2,color="black", fill="grey")+theme_bw()+xlab("Proportion Agreement")
+
+#for deltaK broad
+h_dkn <-ggplot(dkn_num_0, aes(x=prop_agree)) + 
+  geom_histogram(binwidth = 0.2,color="black", fill="grey")+theme_bw()+xlab("Proportion Agreement")
+
+#for LnK broad
+h_lnkn <-ggplot(lnkn_num_0, aes(x=prop_agree)) + 
+  geom_histogram(binwidth = 0.2,color="black", fill="grey")+theme_bw()+xlab("Proportion Agreement")
+
+plot_grid(h_dkc, h_lnkc, h_dkn, h_lnkn, labels = "AUTO")
+```
+
+## Figure 2: difference bar plot
+
+```{r}
+#for DeltaK focused
+pdkc <- ggplot(all_sum_dk, aes(x=threshold, y=mean, fill=estimator)) +
+  geom_bar_pattern(position=position_dodge(), stat="identity", colour='black', mapping=aes(pattern=estimator), pattern = c("none", "none", "none", "none", "stripe", "stripe", "stripe", "stripe", "circle", "circle", "circle", "circle", "none", "none", "none", "none")) + scale_fill_grey() +
+  guides(fill = guide_legend(override.aes = 
+                               list(
+                                 pattern = c("none", "stripe", "circle", "none")))) +
+  geom_errorbar(aes(ymin=mean-sem, ymax=mean+sem), width=0.2,position=position_dodge(0.9))+theme_bw()+xlab("Threshold") + ylab("Mean Difference")
+
+#for LnK focused
+plnkc <- ggplot(all_sum_lnk, aes(x=threshold, y=mean, fill=estimator)) +
+  geom_bar_pattern(position=position_dodge(), stat="identity", colour='black', mapping=aes(pattern=estimator), pattern = c("none", "none", "none", "none", "stripe", "stripe", "stripe", "stripe", "circle", "circle", "circle", "circle", "none", "none", "none", "none")) + scale_fill_grey() +
+  guides(fill = guide_legend(override.aes = 
+                               list(
+                                 pattern = c("none", "stripe", "circle", "none")))) +
+  geom_errorbar(aes(ymin=mean-sem, ymax=mean+sem), width=0.2,position=position_dodge(0.9))+theme_bw()+xlab("Threshold") + ylab("Mean Difference")
+
+#for DeltaK non focused
+pdkn <- ggplot(all_sum_dkn, aes(x=threshold, y=mean, fill=estimator)) +
+  geom_bar_pattern(position=position_dodge(), stat="identity", colour='black', mapping=aes(pattern=estimator), pattern = c("none", "none", "none", "none", "stripe", "stripe", "stripe", "stripe", "circle", "circle", "circle", "circle", "none", "none", "none", "none")) + scale_fill_grey() +
+  guides(fill = guide_legend(override.aes = 
+                               list(
+                                 pattern = c("none", "stripe", "circle", "none")))) +
+  geom_errorbar(aes(ymin=mean-sem, ymax=mean+sem), width=0.2,position=position_dodge(0.9))+theme_bw()+xlab("Threshold") + ylab("Mean Difference")
+
+#for LnK non focused
+plnkn <- ggplot(all_sum_lnkn, aes(x=threshold, y=mean, fill=estimator)) +
+  geom_bar_pattern(position=position_dodge(), stat="identity", colour='black', mapping=aes(pattern=estimator), pattern = c("none", "none", "none", "none", "stripe", "stripe", "stripe", "stripe", "circle", "circle", "circle", "circle", "none", "none", "none", "none")) + scale_fill_grey() +
+  guides(fill = guide_legend(override.aes = 
+                               list(
+                                 pattern = c("none", "stripe", "circle", "none")))) +
+  geom_errorbar(aes(ymin=mean-sem, ymax=mean+sem), width=0.2,position=position_dodge(0.9))+theme_bw()+xlab("Threshold") + ylab("Mean Difference")
+
+plot_grid(pdkc, plnkc, pdkn, plnkn, labels = "AUTO")
+
+```
+
+## Figure 3: threshold trend
+
+```{r}
+#melt the dataframes of differences from deltaK
+#coral
+dk_diff2 <- dk_diff
+dk_diff2$dataset <- rownames(dk_diff2)
+m_dk_diff2 <- melt(dk_diff2)
+#noncoral
+dk_diffn2 <- dk_diffn
+dk_diffn2$dataset <- rownames(dk_diffn2)
+m_dk_diffn2 <- melt(dk_diffn2)
+
+#separate estimator from threshold
+#coral
+m_sep_dk_diff2 <- m_dk_diff2 %>% separate(variable, into = c('estimator', 'threshold'), sep = -3)
+#noncoral
+m_sep_dk_diffn2 <- m_dk_diffn2 %>% separate(variable, into = c('estimator', 'threshold'), sep = -3)
+
+#combine estimator name and dataset into new column
+#coral
+m_sep_dk_diff2$d_e <- paste(m_sep_dk_diff2$dataset, m_sep_dk_diff2$estimator, sep = "_")
+#noncoral
+m_sep_dk_diffn2$d_e <- paste(m_sep_dk_diffn2$dataset, m_sep_dk_diffn2$estimator, sep = "_")
+
+#give combination a unique ID
+#coral
+m_dk_diff_id <- m_sep_dk_diff2 %>% group_by(d_e) %>% mutate(id=cur_group_id())
+#noncoral
+m_dk_diffn_id <- m_sep_dk_diffn2 %>% group_by(d_e) %>% mutate(id=cur_group_id())
+
+
+#select datasets from each category (broad and focused) with portion of date/timecode as seed:
+set.seed(2520)
+datasets_coral <- sample(1:104, 2)
+datasets_noncoral <- sample(1:61, 2)
+
+selected_coral_thresh <- subset(m_dk_diff_id, id %in% datasets_coral)
+selected_noncoral_thresh <- subset(m_dk_diffn_id, id %in% datasets_noncoral)
+
+#add in column to say whether it is broad (noncoral) or focused (coral)
+selected_coral_thresh$Category <- c("focused")
+selected_noncoral_thresh$Category <- c("broad")
+
+#combine the two
+both_selected_thresh <- rbind(selected_coral_thresh, selected_noncoral_thresh)
+
+#plot it
+g <- ggplot(both_selected_thresh, aes(x = factor(threshold), y = value, linetype = d_e, group = d_e, shape = Category)) + geom_line() +
+  geom_point(size = 2) + theme_bw() + xlab("Threshold") + ylab("Difference from ΔK") + labs(linetype='Dataset & Estimator') 
+
+g
+
+```
+
+## Figure 4: linear regression
+
+```{r}
+par(mfrow=c(2,2))
+#dk focused
+plot(prop_agree~even, data = even_propagree, xlab="Evenness Score", ylab="Proportion Agreement", main="A")
+lmdk <- lm(prop_agree~even, data = even_propagree, weights=w)
+abline(lmdk, col ="black", lty="dashed")
+#lnk focused
+plot(prop_agree_lnk~even, data = even_propagree, xlab="Evenness Score", ylab="Proportion Agreement", main="B")
+lmln <- lm(prop_agree_lnk~even, data = even_propagree, weights=w)
+abline(lmln, col ="black", lty="dashed")
+#dk broad
+plot(prop_agree_dk~even_score, data = even_propagreeN, xlab="Evenness Score", ylab="Proportion Agreement", main="C")
+lmdkn <- lm(prop_agree_dk~even_score, data = even_propagreeN, weights=wn)
+abline(lmdkn, col ="black", lty="dashed")
+#lnk broad
+plot(prop_agree_lnk~even_score, data = even_propagreeN, xlab="Evenness Score", ylab="Proportion Agreement", main="D")
+lmlnn <- lm(prop_agree_lnk~even_score, data = even_propagreeN, weights=wn)
+abline(lmlnn, col ="black", lty="dashed")
+```
+
+
+# AMOVA #
+
+### First find datasets where Lnk and Dk disagree fully with alt ests and randomly select two
+
+```{r}
+# set the seed as year
+set.seed(2021)
+#### broad Datasets
+all_props_nc <- cbind(dkn_num_0, lnkn_num_0)
+colnames(all_props_nc) <- c("count_dk", "prop_agree_dk", "count_lnk", "prop_agree_lnk")
+
+k_est_disagree_nc <- all_props_nc %>% filter(count_dk == "0" & count_lnk == "0")
+selected_nc <- k_est_disagree_nc[sample(nrow(k_est_disagree_nc), 2), ]
+
+#### focused Datasets
+all_props <- cbind(dk_num_0, lnk_num_0)
+colnames(all_props) <- c("count_dk", "prop_agree_dk", "count_lnk", "prop_agree_lnk")
+
+k_est_disagree <- all_props %>% filter(count_dk == "0" & count_lnk == "0")
+selected_corals <- k_est_disagree[sample(nrow(k_est_disagree), 2), ]
+```
+
+### Get unique K values to test for both datasets
+```{r}
+#broad datasets
+kim_uniq_k <- unique(as.data.frame(t(one_dfn_num))[c("kim")])
+perez_uniq_k <- unique(as.data.frame(t(one_dfn_num))[c("perez")])
+kim_uniq_k
+perez_uniq_k
+
+#focused datasets
+baums_uniq_k <- unique(as.data.frame(t(one_df_num))[c("baums2010_mf")])
+rippe_uniq_k <- unique(as.data.frame(t(one_df_num))[c("rippe")])
+baums_uniq_k
+rippe_uniq_k
+```
+
+
+#### Read in the data for the clump files
+
+```{r}
+
+
+#################### Kim, K=2,5-8
+kim_2_clumpp <- read.table("~/broad/clump_zip/clump_results/1614710948/1614710948/K=2/CLUMPP.files/ClumppIndFile.output")
+kim_5_clumpp <- read.table("~/broad/clump_zip/clump_results/1614710948/1614710948/K=5/CLUMPP.files/ClumppIndFile.output")
+kim_6_clumpp <- read.table("~/broad/clump_zip/clump_results/1614710948/1614710948/K=6/CLUMPP.files/ClumppIndFile.output")
+kim_7_clumpp <- read.table("~/broad/clump_zip/clump_results/1614710948/1614710948/K=7/CLUMPP.files/ClumppIndFile.output")
+kim_8_clumpp <- read.table("~/broad/clump_zip/clump_results/1614710948/1614710948/K=8/CLUMPP.files/ClumppIndFile.output")
+
+#################### Perez, K=2,7,12
+perez_2_clumpp <- read.table("~/broad/clump_zip/clump_results/1614711525/1614711525/K=2/CLUMPP.files/ClumppIndFile.output")
+perez_7_clumpp <- read.table("~/broad/clump_zip/clump_results/1614711525/1614711525/K=7/CLUMPP.files/ClumppIndFile.output")
+perez_12_clumpp <- read.table("~/broad/clump_zip/clump_results/1614711525/1614711525/K=12/CLUMPP.files/ClumppIndFile.output")
+
+###### focused Datasets ######
+
+#################### Baums, K=1-3
+baums10mf_2_clumpp <- read.table("~/focused/clump_zip/results_clump/1614699356/1614699356/K=2/CLUMPP.files/ClumppIndFile.output")
+baums10mf_3_clumpp <- read.table("~/focused/clump_zip/results_clump/1614699356/1614699356/K=3/CLUMPP.files/ClumppIndFile.output")
+
+#################### Rippe, K=2-5,10
+rippe_2_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=2/CLUMPP.files/ClumppIndFile.output")
+rippe_3_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=3/CLUMPP.files/ClumppIndFile.output")
+rippe_4_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=4/CLUMPP.files/ClumppIndFile.output")
+rippe_5_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=5/CLUMPP.files/ClumppIndFile.output")
+rippe_10_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=10/CLUMPP.files/ClumppIndFile.output")
+
+```
+
+### Assign individuals to populations
+```{r}
+##### broad Datasets
+### Kim
+kim_2_clumpp <- kim_2_clumpp[, c(6:ncol(kim_2_clumpp))]
+colnames(kim_2_clumpp) <- c(seq(1,2))
+kim_2_clumpp$Pop <- colnames(kim_2_clumpp)[apply(kim_2_clumpp,1,which.max)]
+
+kim_5_clumpp <- kim_5_clumpp[, c(6:ncol(kim_5_clumpp))]
+colnames(kim_5_clumpp) <- c(seq(1,5))
+kim_5_clumpp$Pop <- colnames(kim_5_clumpp)[apply(kim_5_clumpp,1,which.max)]
+
+kim_6_clumpp <- kim_6_clumpp[, c(6:ncol(kim_6_clumpp))]
+colnames(kim_6_clumpp) <- c(seq(1,6))
+kim_6_clumpp$Pop <- colnames(kim_6_clumpp)[apply(kim_6_clumpp,1,which.max)]
+
+kim_7_clumpp <- kim_7_clumpp[, c(6:ncol(kim_7_clumpp))]
+colnames(kim_7_clumpp) <- c(seq(1,7))
+kim_7_clumpp$Pop <- colnames(kim_7_clumpp)[apply(kim_7_clumpp,1,which.max)]
+
+kim_8_clumpp <- kim_8_clumpp[, c(6:ncol(kim_8_clumpp))]
+colnames(kim_8_clumpp) <- c(seq(1,8))
+kim_8_clumpp$Pop <- colnames(kim_8_clumpp)[apply(kim_8_clumpp,1,which.max)]
+
+### Perez
+perez_2_clumpp <- perez_2_clumpp[, c(6:ncol(perez_2_clumpp))]
+colnames(perez_2_clumpp) <- c(seq(1,2))
+perez_2_clumpp$Pop <- colnames(perez_2_clumpp)[apply(perez_2_clumpp,1,which.max)]
+
+perez_7_clumpp <- perez_7_clumpp[, c(6:ncol(perez_7_clumpp))]
+colnames(perez_7_clumpp) <- c(seq(1,7))
+perez_7_clumpp$Pop <- colnames(perez_7_clumpp)[apply(perez_7_clumpp,1,which.max)]
+
+perez_12_clumpp <- perez_12_clumpp[, c(6:ncol(perez_12_clumpp))]
+colnames(perez_12_clumpp) <- c(seq(1,12))
+perez_12_clumpp$Pop <- colnames(perez_12_clumpp)[apply(perez_12_clumpp,1,which.max)]
+
+##### focused Datasets
+
+### Baums
+baums10mf_2_clumpp <- baums10mf_2_clumpp[, c(6:ncol(baums10mf_2_clumpp))]
+colnames(baums10mf_2_clumpp) <- c(seq(1,2))
+baums10mf_2_clumpp$Pop <- colnames(baums10mf_2_clumpp)[apply(baums10mf_2_clumpp,1,which.max)]
+
+baums10mf_3_clumpp <- baums10mf_3_clumpp[, c(6:ncol(baums10mf_3_clumpp))]
+colnames(baums10mf_3_clumpp) <- c(seq(1,3))
+baums10mf_3_clumpp$Pop <- colnames(baums10mf_3_clumpp)[apply(baums10mf_3_clumpp,1,which.max)]
+
+### Rippe
+rippe_2_clumpp <- rippe_2_clumpp[, c(6:ncol(rippe_2_clumpp))]
+colnames(rippe_2_clumpp) <- c(seq(1,2))
+rippe_2_clumpp$Pop <- colnames(rippe_2_clumpp)[apply(rippe_2_clumpp,1,which.max)]
+
+rippe_3_clumpp <- rippe_3_clumpp[, c(6:ncol(rippe_3_clumpp))]
+colnames(rippe_3_clumpp) <- c(seq(1,3))
+rippe_3_clumpp$Pop <- colnames(rippe_3_clumpp)[apply(rippe_3_clumpp,1,which.max)]
+
+rippe_4_clumpp <- rippe_4_clumpp[, c(6:ncol(rippe_4_clumpp))]
+colnames(rippe_4_clumpp) <- c(seq(1,4))
+rippe_4_clumpp$Pop <- colnames(rippe_4_clumpp)[apply(rippe_4_clumpp,1,which.max)]
+
+rippe_5_clumpp <- rippe_5_clumpp[, c(6:ncol(rippe_5_clumpp))]
+colnames(rippe_5_clumpp) <- c(seq(1,5))
+rippe_5_clumpp$Pop <- colnames(rippe_5_clumpp)[apply(rippe_5_clumpp,1,which.max)]
+
+rippe_10_clumpp <- rippe_10_clumpp[, c(6:ncol(rippe_10_clumpp))]
+colnames(rippe_10_clumpp) <- c(seq(1,10))
+rippe_10_clumpp$Pop <- colnames(rippe_10_clumpp)[apply(rippe_10_clumpp,1,which.max)]
+
+```
+
+### Read in the genotype files
+```{r}
+#must rename the structure input files to end in .stru
+#if a pop column (eg. from sampling sites) does already exist, designate it as "other" to retain the info
+
+### broad Datasets
+#Kim
+kim_geno2 <- read.structure("~/broad/kim/kim/kim_2017_fixed.stru", n.ind = 320, n.loc = 8, onerowperind = TRUE, col.lab = 1, col.pop = 0, col.others = 2, NA.char =-9, ask = FALSE, row.marknames = 0)
+
+kim_geno5 <- kim_geno2
+kim_geno6 <- kim_geno2
+kim_geno7 <- kim_geno2
+kim_geno8 <- kim_geno2
+
+#Perez
+perez_geno2 <- read.structure("~/broad/perez/perez/perez_2014_fixed2.stru", n.ind = 330, n.loc = 9, onerowperind = TRUE, col.lab = 1, col.pop = 0, col.others = 2, NA.char =-9, ask = FALSE, row.marknames = 0)
+
+perez_geno7 <- perez_geno2
+
+# focused datasets
+
+#Baums
+baums10_geno2 <- read.structure("~/focused/baums_2010_mfav/baums_mfav.stru", n.ind = 182, n.loc = 5, onerowperind = TRUE, col.lab = 1, col.pop = 0, col.others = 2:3, NA.char = -9, ask = FALSE)
+
+baums10_geno3 <- baums10_geno2
+
+# Rippe
+rippe_geno2 <- read.structure("~/focused/rippe/Rippe2017_fixed.stru", n.ind = 369, n.loc = 9, onerowperind = TRUE, col.lab = 1, col.pop = 0, col.others = 2:3, NA.char = -9, ask = FALSE, row.marknames = 1)
+
+rippe_geno3 <- rippe_geno2
+rippe_geno4 <- rippe_geno2
+rippe_geno5 <- rippe_geno2
+rippe_geno10 <- rippe_geno2
+```
+
+### Add in the strata and pop information
+```{r}
+### broad Datasets
+
+## Kim 
+strata(kim_geno2) <- kim_2_clumpp[c("Pop")]
+setPop(kim_geno2) <- ~Pop
+kim2_genclone <- as.genclone(kim_geno2)
+
+strata(kim_geno5) <- kim_5_clumpp[c("Pop")]
+setPop(kim_geno5) <- ~Pop
+kim5_genclone <- as.genclone(kim_geno5)
+
+strata(kim_geno6) <- kim_6_clumpp[c("Pop")]
+setPop(kim_geno6) <- ~Pop
+kim6_genclone <- as.genclone(kim_geno6)
+
+strata(kim_geno7) <- kim_7_clumpp[c("Pop")]
+setPop(kim_geno7) <- ~Pop
+kim7_genclone <- as.genclone(kim_geno7)
+
+strata(kim_geno8) <- kim_8_clumpp[c("Pop")]
+setPop(kim_geno8) <- ~Pop
+kim8_genclone <- as.genclone(kim_geno8)
+
+## Perez
+strata(perez_geno2) <- perez_2_clumpp[c("Pop")]
+setPop(perez_geno2) <- ~Pop
+perez2_genclone <- as.genclone(perez_geno2)
+
+strata(perez_geno7) <- perez_7_clumpp[c("Pop")]
+setPop(perez_geno7) <- ~Pop
+perez7_genclone <- as.genclone(perez_geno7)
+
+### focused datasets
+
+# Baums
+strata(baums10_geno2) <- baums10mf_2_clumpp[c("Pop")]
+setPop(baums10_geno2) <- ~Pop
+baums2_genclone <- as.genclone(baums10_geno2)
+
+strata(baums10_geno3) <- baums10mf_3_clumpp[c("Pop")]
+setPop(baums10_geno3) <- ~Pop
+baums3_genclone <- as.genclone(baums10_geno3)
+
+# Rippe
+strata(rippe_geno2) <- rippe_2_clumpp[c("Pop")]
+setPop(rippe_geno2) <- ~Pop
+rippe2_genclone <- as.genclone(rippe_geno2)
+
+strata(rippe_geno3) <- rippe_3_clumpp[c("Pop")]
+setPop(rippe_geno3) <- ~Pop
+rippe3_genclone <- as.genclone(rippe_geno3)
+
+strata(rippe_geno4) <- rippe_4_clumpp[c("Pop")]
+setPop(rippe_geno4) <- ~Pop
+rippe4_genclone <- as.genclone(rippe_geno4)
+
+strata(rippe_geno5) <- rippe_5_clumpp[c("Pop")]
+setPop(rippe_geno5) <- ~Pop
+rippe5_genclone <- as.genclone(rippe_geno5)
+
+strata(rippe_geno10) <- rippe_10_clumpp[c("Pop")]
+setPop(rippe_geno10) <- ~Pop
+rippe10_genclone <- as.genclone(rippe_geno10)
+```
+
+### Run AMOVA
+```{r}
+# broad datasets
+# Kim
+kim2_amova <- poppr.amova(kim2_genclone, ~Pop)
+kim5_amova <- poppr.amova(kim5_genclone, ~Pop)
+kim6_amova <- poppr.amova(kim6_genclone, ~Pop)
+kim7_amova <- poppr.amova(kim7_genclone, ~Pop)
+kim8_amova <- poppr.amova(kim8_genclone, ~Pop)
+
+# Perez
+perez2_amova <- poppr.amova(perez2_genclone, ~Pop)
+perez7_amova <- poppr.amova(perez7_genclone, ~Pop)
+
+# focused datasets
+# Baums
+baums2_amova <- poppr.amova(baums2_genclone, ~Pop)
+baums3_amova <- poppr.amova(baums3_genclone, ~Pop)
+
+# Rippe
+rippe2_amova <- poppr.amova(rippe2_genclone, ~Pop)
+rippe3_amova <- poppr.amova(rippe3_genclone, ~Pop)
+rippe4_amova <- poppr.amova(rippe4_genclone, ~Pop)
+rippe5_amova <- poppr.amova(rippe5_genclone, ~Pop)
+rippe10_amova <- poppr.amova(rippe10_genclone, ~Pop)
+```
+
+# Check the results
+```{r}
+# broad datasets
+# Kim
+kim2_amova
+kim5_amova
+kim6_amova
+kim7_amova
+kim8_amova
+
+# Perez
+perez2_amova 
+perez7_amova 
+
+# focused datasets 
+# Baums
+baums2_amova
+baums3_amova
+
+# Rippe
+rippe2_amova
+rippe3_amova
+rippe4_amova
+rippe5_amova
+rippe10_amova
+```
+
+
+
+
+### Run significance test
+this will take a long time
+```{r}
+#set seed, taken from poppr tutorial
+set.seed(1999)
+# broad datasets
+# Kim
+kim2_test <- randtest(kim2_amova, nrepet = 999)
+kim5_test <- randtest(kim5_amova, nrepet = 999)
+kim6_test <- randtest(kim6_amova, nrepet = 999)
+kim7_test <- randtest(kim7_amova, nrepet = 999)
+kim8_test <- randtest(kim8_amova, nrepet = 999)
+
+# Perez
+perez2_test <- randtest(perez2_amova, nrepet = 999)
+perez7_test <- randtest(perez7_amova, nrepet = 999)
+
+# focused datasets
+# Baums
+baums2_test <- randtest(baums2_amova, nrepet = 999)
+baums3_test <- randtest(baums3_amova, nrepet = 999)
+
+# Rippe
+rippe2_test <- randtest(rippe2_amova, nrepet = 999)
+rippe3_test <- randtest(rippe3_amova, nrepet = 999)
+rippe4_test <- randtest(rippe4_amova, nrepet = 999)
+rippe5_test <- randtest(rippe5_amova, nrepet = 999)
+rippe10_test <- randtest(rippe10_amova, nrepet = 999)
+```
+
+# Check the results
+```{r}
+# broad datasets
+# Kim
+kim2_test
+kim5_test
+kim6_test
+kim7_test
+kim8_test
+
+# Perez
+perez2_test
+perez7_test
+
+# focused datasets
+# Baums
+baums2_test
+baums3_test
+
+# Rippe
+rippe2_test
+rippe3_test
+rippe4_test
+rippe5_test
+rippe10_test
+```
+
+
+# write out the results
+```{r}
+# broad
+# Kim
+write.table(kim2_amova$componentsofcovariance, sep = ",", file = "kim2_amova.csv")
+write.table(kim5_amova$componentsofcovariance, sep = ",", file = "kim5_amova.csv")
+write.table(kim6_amova$componentsofcovariance, sep = ",", file = "kim6_amova.csv")
+write.table(kim7_amova$componentsofcovariance, sep = ",", file = "kim7_amova.csv")
+write.table(kim8_amova$componentsofcovariance, sep = ",", file = "kim8_amova.csv")
+
+# Perez
+write.table(perez2_amova$componentsofcovariance, sep = ",", file = "perez2_amova.csv")
+write.table(perez7_amova$componentsofcovariance, sep = ",", file = "perez7_amova.csv")
+
+# focused
+# Baums
+write.table(baums2_amova$componentsofcovariance, sep = ",", file = "baums2_amova.csv")
+write.table(baums3_amova$componentsofcovariance, sep = ",", file = "baums3_amova.csv")
+
+# Rippe
+write.table(rippe2_amova$componentsofcovariance, sep = ",", file = "rippe2_amova.csv")
+write.table(rippe3_amova$componentsofcovariance, sep = ",", file = "rippe3_amova.csv")
+write.table(rippe4_amova$componentsofcovariance, sep = ",", file = "rippe4_amova.csv")
+write.table(rippe5_amova$componentsofcovariance, sep = ",", file = "rippe5_amova.csv")
+write.table(rippe10_amova$componentsofcovariance, sep = ",", file = "rippe10_amova.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
