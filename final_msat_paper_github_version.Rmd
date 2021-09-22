@@ -1,5 +1,5 @@
 ---
-title: "msat paper analysis and figures"
+title: "K estimation paper analysis and figures"
 author: "Kate Stankiewicz"
 date: "3/26/2021"
 output: html_document
