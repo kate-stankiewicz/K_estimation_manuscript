@@ -1,5 +1,5 @@
 # K_Estimation_PopGen
-** by Kate Stankiewicz **
+**by Kate Stankiewicz**
 
 This is the GitHub page for analyses and figures associated with manuscript:
 
