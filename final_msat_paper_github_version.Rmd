@@ -565,15 +565,15 @@ perez_12_clumpp <- read.table("~/broad/clump_zip/clump_results/1614711525/161471
 ###### focused Datasets ######
 
 #################### Baums, K=1-3
-baums10mf_2_clumpp <- read.table("~/focused/clump_zip/results_clump/1614699356/1614699356/K=2/CLUMPP.files/ClumppIndFile.output")
-baums10mf_3_clumpp <- read.table("~/focused/clump_zip/results_clump/1614699356/1614699356/K=3/CLUMPP.files/ClumppIndFile.output")
+baums10mf_2_clumpp <- read.table("~/focused/clump_zip/clump_results/1614699356/1614699356/K=2/CLUMPP.files/ClumppIndFile.output")
+baums10mf_3_clumpp <- read.table("~/focused/clump_zip/clump_results/1614699356/1614699356/K=3/CLUMPP.files/ClumppIndFile.output")
 
 #################### Rippe, K=2-5,10
-rippe_2_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=2/CLUMPP.files/ClumppIndFile.output")
-rippe_3_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=3/CLUMPP.files/ClumppIndFile.output")
-rippe_4_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=4/CLUMPP.files/ClumppIndFile.output")
-rippe_5_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=5/CLUMPP.files/ClumppIndFile.output")
-rippe_10_clumpp <- read.table("~/focused/clump_zip/results_clump/1614701985/1614701985/K=10/CLUMPP.files/ClumppIndFile.output")
+rippe_2_clumpp <- read.table("~/focused/clump_zip/clump_results/1614701985/1614701985/K=2/CLUMPP.files/ClumppIndFile.output")
+rippe_3_clumpp <- read.table("~/focused/clump_zip/clump_results/1614701985/1614701985/K=3/CLUMPP.files/ClumppIndFile.output")
+rippe_4_clumpp <- read.table("~/focused/clump_zip/clump_results/1614701985/1614701985/K=4/CLUMPP.files/ClumppIndFile.output")
+rippe_5_clumpp <- read.table("~/focused/clump_zip/clump_results/1614701985/1614701985/K=5/CLUMPP.files/ClumppIndFile.output")
+rippe_10_clumpp <- read.table("~/focused/clump_zip/clump_results/1614701985/1614701985/K=10/CLUMPP.files/ClumppIndFile.output")
 
 ```
 
